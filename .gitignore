@@ -1,0 +1,7 @@
+.idea/
+.git/
+.env
+.DS_Store
+go.sum
+runtime/
+vendor
