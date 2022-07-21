@@ -13,7 +13,7 @@ var (
 	id           = flag.Int("i", 0, "bookId")
 	dp           = flag.String("p", "download/", "download path")
 	num          = flag.Int("n", 1, "thread num default 1")
-	mode         = flag.Int("m", 1, "download mod optional 1:Overwrite,2:Skip,3:Keep Original")
+	mode         = flag.Int("m", 1, "download mod optional 1:Overwrite,2:Skip,3:Breakpoint Recovery,4:Keep Original")
 	maxThreadNum = runtime.NumCPU() * 2
 )
 
@@ -27,7 +27,7 @@ func main() {
 		log.Fatal(console.Red("请设置bookId"))
 	}
 	if threadNum > maxThreadNum {
-		log.Fatal(console.Red("thread num 不可超过CUP核心数"))
+		log.Fatal(console.Red("thread num 不可超过CUP*2核心数"))
 	}
 	downloadModeVal, ok := book.ModeMap[downloadMode]
 	if !ok {

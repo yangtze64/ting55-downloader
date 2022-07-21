@@ -15,7 +15,8 @@ type downloader struct {
 var ModeMap = map[int]string{
 	1: "Overwrite",
 	2: "Skip",
-	3: "Keep Original",
+	3: "Breakpoint Recovery",
+	4: "Keep Original",
 }
 
 func NewDownloader(num int, mode int, dpath string) *downloader {
