@@ -34,7 +34,7 @@ func Parse(bookId int) *Book {
 	if err != nil {
 		log.Fatal(console.Red(fmt.Sprintf("Random Gen UA Fail,%s", err.Error())))
 	}
-	fmt.Println(UA)
+	fmt.Printf("UA:%s\n", UA)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		log.Fatal(console.Red(fmt.Sprintf("http.NewRequest Fail,%s", err.Error())))
@@ -82,5 +82,10 @@ func (b *Book) Init(html string) {
 		b.Status = match[0][6]
 		b.Category = match[0][7]
 	}
-	fmt.Println(match[0][8])
+	re = regexp.MustCompile(`<a.*?>(.*?)</a>`)
+	l := re.FindAllStringSubmatch(match[0][8], -1)
+	if l == nil {
+		log.Fatal(console.Red("Set number not matched, Please try again"))
+	}
+	b.Number = len(l)
 }

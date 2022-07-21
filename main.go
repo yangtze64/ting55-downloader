@@ -15,11 +15,6 @@ var (
 	num          = flag.Int("n", 1, "thread num default 1")
 	mode         = flag.Int("m", 1, "download mod optional 1:Overwrite,2:Skip,3:Keep Original")
 	maxThreadNum = runtime.NumCPU() * 2
-	modeMap      = map[int]string{
-		1: "Overwrite",
-		2: "Skip",
-		3: "Keep Original",
-	}
 )
 
 func main() {
@@ -34,14 +29,14 @@ func main() {
 	if threadNum > maxThreadNum {
 		log.Fatal(console.Red("thread num 不可超过CUP核心数"))
 	}
-	downloadModeVal, ok := modeMap[downloadMode]
+	downloadModeVal, ok := book.ModeMap[downloadMode]
 	if !ok {
 		log.Fatal(console.Red("download mod 1:Overwrite,2:Skip,3:Keep Original"))
 	}
-	log.Println(console.Yellow(fmt.Sprintf("bookId:%d", bookId)))
-	log.Println(console.Yellow(fmt.Sprintf("threadNum:%d", threadNum)))
-	log.Println(console.Yellow(fmt.Sprintf("downloadMode:%s", downloadModeVal)))
-	log.Println(console.Yellow(fmt.Sprintf("downloadPath:%s", downloadPath)))
+	log.Println(console.Yellow(fmt.Sprintf("bookId:%d, threadNum:%d, downloadPath:%s, downloadMode:%s", bookId, threadNum, downloadPath, downloadModeVal)))
 	bookInfo := book.Parse(bookId)
-	fmt.Println(bookInfo)
+	fmt.Printf("%#+v\n", bookInfo)
+
+	downloader := book.NewDownloader(threadNum, downloadMode, downloadPath)
+	downloader.Download(bookInfo)
 }
