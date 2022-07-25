@@ -44,6 +44,9 @@ func Parse(bookId int) *Book {
 	if err != nil {
 		log.Fatal(console.Red(fmt.Sprintf("Parsing %s Fail,%s", url, err.Error())))
 	}
+	if res.StatusCode != http.StatusOK {
+		log.Fatal(console.Red(fmt.Sprintf("res.StatusCode Is %d Not Is %d", res.StatusCode, http.StatusOK)))
+	}
 	body, err := ioutil.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
@@ -70,7 +73,11 @@ func (b *Book) Init(html string) {
 	if match == nil {
 		log.Fatal(console.Red("No book information was matched"))
 	}
-	b.Cover = match[0][1]
+	cover := match[0][1]
+	if !strings.Contains(cover, "http:") && !strings.Contains(cover, "https:") {
+		cover = "http:" + cover
+	}
+	b.Cover = cover
 	b.Title = match[0][2]
 	b.Category = match[0][3]
 	b.Author = match[0][4]
@@ -80,7 +87,7 @@ func (b *Book) Init(html string) {
 		b.Status = match[0][7]
 	} else {
 		b.Status = match[0][6]
-		b.Category = match[0][7]
+		b.CreateTime = match[0][7]
 	}
 	re = regexp.MustCompile(`<a.*?>(.*?)</a>`)
 	l := re.FindAllStringSubmatch(match[0][8], -1)
