@@ -74,11 +74,15 @@ func (b *Book) Init(html string) {
 		log.Fatal(console.Red("No book information was matched"))
 	}
 	cover := match[0][1]
-	if !strings.Contains(cover, "http:") && !strings.Contains(cover, "https:") {
+	if !strings.HasPrefix(cover, "http:") && !strings.HasPrefix(cover, "https:") {
 		cover = "http:" + cover
 	}
 	b.Cover = cover
-	b.Title = match[0][2]
+	title := match[0][2]
+	if strings.HasSuffix(title, "有声小说") {
+		title = strings.TrimSuffix(title, "有声小说")
+	}
+	b.Title = title
 	b.Category = match[0][3]
 	b.Author = match[0][4]
 	b.Announcer = match[0][5]

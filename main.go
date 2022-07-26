@@ -36,7 +36,6 @@ func main() {
 	log.Println(console.Yellow(fmt.Sprintf("bookId:%d, threadNum:%d, downloadPath:%s, downloadMode:%s", bookId, threadNum, downloadPath, downloadModeVal)))
 	bookInfo := book.Parse(bookId)
 	fmt.Printf("%#+v\n", bookInfo)
-
-	downloader := book.NewDownloader(threadNum, downloadMode, downloadPath)
-	downloader.Download(bookInfo)
+	downloader := book.NewDownloader(bookInfo, threadNum, downloadMode, downloadPath)
+	downloader.Download()
 }

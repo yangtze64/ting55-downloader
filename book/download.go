@@ -9,15 +9,18 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"strconv"
+	"sync"
 	"time"
 	"ting55-downloader/pkg/console"
 )
 
 type downloader struct {
-	threadNum    int
-	downloadMode int
-	downloadPath string
+	book          *Book
+	threadNum     int
+	downloadMode  int
+	downloadPath  string
+	jobFinishChan chan bool
+	mutex         sync.Mutex
 }
 
 var ModeMap = map[int]string{
@@ -46,72 +49,126 @@ func FileIsExist(file string) bool {
 	return err == nil || os.IsExist(err)
 }
 
-func NewDownloader(num int, mode int, dpath string) *downloader {
+func NewDownloader(book *Book, num int, mode int, dpath string) *downloader {
+	dpath = path.Join(dpath, book.Title)
 	if exist := FileIsExist(dpath); !exist {
 		if err := os.MkdirAll(dpath, 0775); err != nil {
 			log.Fatal(console.Red("Config file create Error"))
 		}
 	}
 	return &downloader{
-		threadNum:    num,
-		downloadMode: mode,
-		downloadPath: dpath,
+		book:          book,
+		threadNum:     num,
+		downloadMode:  mode,
+		downloadPath:  dpath,
+		jobFinishChan: make(chan bool, 1),
 	}
 }
 
-func (d *downloader) Download(book *Book) {
+func (d *downloader) Download() {
+	book := d.book
 	log.Println(console.Green(fmt.Sprintf("Start Download Book,BookId:%d BookName:%s", book.Id, book.Title)))
-	pool := pb.NewPool()
-	pool.Start()
-	coverCh := make(chan bool, 1)
+	// 处理封面
 	if book.Cover != "" {
-		go func() {
-			err := d.downloadCover(book, pool)
-			if err != nil {
-				coverCh <- false
-				fmt.Println(err)
-			} else {
-				coverCh <- true
-			}
-		}()
+		go d.downloadCover()
 	}
-	go d.saveBookInfoToFile(book)
-	for i := 0; i < d.threadNum; i++ {
+	// 保存基本信息到文件
+	go d.saveBookInfoToFile()
 
+	//pool := pb.NewPool()
+	//pool.Start()
+	//defer func() {
+	//	pool.Stop()
+	//}()
+
+	// 投递任务
+	n := d.threadNum
+	if d.threadNum > book.Number {
+		n = book.Number
 	}
-	<-coverCh
-	pool.Stop()
+	jobCh := make(chan int, n)
+	statusCh := make(chan int, n)
+	go d.deliver(jobCh)
+	go func() {
+		for i := 0; i < n; i++ {
+			no, ok := <-jobCh
+			if ok {
+				go d.downloadJob(no, statusCh)
+			}
+		}
+		for i := 0; i < book.Number; i++ {
+			<-statusCh
+			// fmt.Printf("statusCh no:%d\n", s)
+			b, ok := <-jobCh
+			if ok {
+				go d.downloadJob(b, statusCh)
+			} else {
+				// fmt.Println("jobCh Closed")
+			}
+		}
+		d.jobFinishChan <- true
+	}()
+	<-d.jobFinishChan
 }
 
-func (d *downloader) downloadCover(book *Book, pool *pb.Pool) error {
+// 下载封面
+func (d *downloader) downloadCover() error {
+	book := d.book
 	res, err := http.Get(book.Cover)
+	defer res.Body.Close()
 	if err != nil {
 		return err
 	}
 	if res.StatusCode != http.StatusOK {
 		return err
 	}
-	length := res.Header.Get("Content-Length")
-	size, _ := strconv.ParseInt(length, 10, 64)
-	bar := GetProgressBar("封面图", size)
-	pool.Add(bar)
-	defer bar.Finish()
 	body := res.Body
-	reader := bar.NewProxyReader(body)
 	coverPath := path.Join(d.downloadPath, "封面图.png")
 	file, err := os.Create(coverPath)
 	if err != nil {
 		return err
 	}
-	writer := io.Writer(file)
-	_, err = io.Copy(writer, reader)
+	_, err = io.Copy(file, body)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (d *downloader) saveBookInfoToFile(book *Book) error {
+//func (d *downloader) downloadCover() error {
+//	book := d.book
+//	res, err := http.Get(book.Cover)
+//	if err != nil {
+//		return err
+//	}
+//	if res.StatusCode != http.StatusOK {
+//		return err
+//	}
+//	length := res.Header.Get("Content-Length")
+//	size, _ := strconv.ParseInt(length, 10, 64)
+//	d.mutex.Lock()
+//	bar := GetProgressBar("封面图", size)
+//	pool.Add(bar)
+//	d.mutex.Unlock()
+//	defer bar.Finish()
+//	body := res.Body
+//	reader := bar.NewProxyReader(body)
+//	coverPath := path.Join(d.downloadPath, "封面图.png")
+//	file, err := os.Create(coverPath)
+//	if err != nil {
+//		return err
+//	}
+//	writer := io.Writer(file)
+//	_, err = io.Copy(writer, reader)
+//	if err != nil {
+//		return err
+//	}
+//	return nil
+//}
+
+// 保存书的基本信息
+func (d *downloader) saveBookInfoToFile() error {
+	book := d.book
 	file, err := os.OpenFile(path.Join(d.downloadPath, "book.txt"), os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0775)
 	if err != nil {
 		return err
@@ -127,4 +184,22 @@ func (d *downloader) saveBookInfoToFile(book *Book) error {
 	write.WriteString(fmt.Sprintf("%s：%s\n", "时间", book.CreateTime))
 	write.Flush()
 	return nil
+}
+
+func (d *downloader) deliver(jobCh chan int) {
+	book := d.book
+	// 投递任务
+	go func() {
+		for i := 1; i <= book.Number; i++ {
+			fmt.Sprintf("%d\n", i)
+			jobCh <- i
+		}
+		close(jobCh)
+	}()
+}
+
+func (d *downloader) downloadJob(no int, statusCh chan int) {
+	fmt.Printf("download no:%d\n", no)
+	// x-forwarded-for
+	statusCh <- no
 }
