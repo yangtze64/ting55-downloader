@@ -2,7 +2,9 @@ package book
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"github.com/avast/retry-go"
 	"github.com/cheggaaa/pb/v3"
 	"io"
 	"log"
@@ -120,7 +122,7 @@ func (d *downloader) downloadCover() error {
 		return err
 	}
 	if res.StatusCode != http.StatusOK {
-		return err
+		return errors.New(fmt.Sprintf("Cover res.StatusCode Is %d Not Is %d", res.StatusCode, http.StatusOK))
 	}
 	body := res.Body
 	coverPath := path.Join(d.downloadPath, "封面图.png")
@@ -200,7 +202,7 @@ func (d *downloader) deliver(jobCh chan int) {
 
 func (d *downloader) downloadJob(no int, statusCh chan int) error {
 	fmt.Printf("download chapter:%d\n", no)
-	time.Sleep(time.Millisecond * 100)
+	time.Sleep(time.Second * 2)
 	err := d.DownloadAudio(no)
 	fmt.Println(err)
 	statusCh <- no
@@ -211,6 +213,7 @@ func (d *downloader) DownloadAudio(no int) error {
 	book := d.book
 	chapter, err := book.GetChapter(no)
 	if err != nil {
+		log.Fatal(err)
 		return err
 	}
 	url, err := chapter.GetChapterAudioUrl()
@@ -218,24 +221,30 @@ func (d *downloader) DownloadAudio(no int) error {
 		return err
 	}
 	ext := path.Ext(url) //获取文件后缀
+	er := retry.Do(func() error {
+		res, e := http.Get(url)
+		defer res.Body.Close()
+		if e != nil {
+			return err
+		}
+		if res.StatusCode != http.StatusOK {
+			return errors.New(fmt.Sprintf("Audio Download res.StatusCode Is %d Not Is %d", res.StatusCode, http.StatusOK))
+		}
+		body := res.Body
+		audioPath := path.Join(d.downloadPath, fmt.Sprintf("%s-第%d章%s", book.Title, no, ext))
+		file, e := os.Create(audioPath)
+		if e != nil {
+			return e
+		}
+		_, err = io.Copy(file, body)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 
-	res, err := http.Get(url)
-	defer res.Body.Close()
-	if err != nil {
-		return err
-	}
-	if res.StatusCode != http.StatusOK {
-		return err
-	}
-	body := res.Body
-	audioPath := path.Join(d.downloadPath, fmt.Sprintf("%s-第%d章%s", book.Title, no, ext))
-	file, err := os.Create(audioPath)
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(file, body)
-	if err != nil {
-		return err
+	if er != nil {
+		return er
 	}
 	return nil
 }

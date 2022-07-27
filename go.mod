@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/VividCortex/ewma v1.1.1 // indirect
+	github.com/avast/retry-go v3.0.0+incompatible // indirect
 	github.com/cheggaaa/pb/v3 v3.1.0 // indirect
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect

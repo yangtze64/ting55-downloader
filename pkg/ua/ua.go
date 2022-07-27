@@ -84,8 +84,9 @@ func (ua *UserAgent) Random() (string, error) {
 		return "", errors.New("Unable to get UA")
 	}
 	rand.Seed(time.Now().UnixNano())
-	r := rand.Intn(len(uaSlice))
-	return uaSlice[r], nil
+	count := len(uaSlice)
+	r := rand.Intn(count * 10000)
+	return uaSlice[r%count], nil
 }
 
 func (ua *UserAgent) RandomAgent() AgentType {
@@ -104,8 +105,8 @@ func (ua *UserAgent) RandomAgent() AgentType {
 		count = len(prepareAgent)
 	}
 	rand.Seed(time.Now().UnixNano())
-	r := rand.Intn(count)
-	return prepareAgent[r]
+	r := rand.Intn(count * 10000)
+	return prepareAgent[r%count]
 }
 
 func (ua *UserAgent) IssetAgent(agent AgentType) bool {
