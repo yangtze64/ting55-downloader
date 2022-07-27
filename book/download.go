@@ -198,8 +198,44 @@ func (d *downloader) deliver(jobCh chan int) {
 	}()
 }
 
-func (d *downloader) downloadJob(no int, statusCh chan int) {
-	fmt.Printf("download no:%d\n", no)
-	// x-forwarded-for
+func (d *downloader) downloadJob(no int, statusCh chan int) error {
+	fmt.Printf("download chapter:%d\n", no)
+	time.Sleep(time.Millisecond * 100)
+	err := d.DownloadAudio(no)
+	fmt.Println(err)
 	statusCh <- no
+	return nil
+}
+
+func (d *downloader) DownloadAudio(no int) error {
+	book := d.book
+	chapter, err := book.GetChapter(no)
+	if err != nil {
+		return err
+	}
+	url, err := chapter.GetChapterAudioUrl()
+	if err != nil {
+		return err
+	}
+	ext := path.Ext(url) //获取文件后缀
+
+	res, err := http.Get(url)
+	defer res.Body.Close()
+	if err != nil {
+		return err
+	}
+	if res.StatusCode != http.StatusOK {
+		return err
+	}
+	body := res.Body
+	audioPath := path.Join(d.downloadPath, fmt.Sprintf("%s-第%d章%s", book.Title, no, ext))
+	file, err := os.Create(audioPath)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(file, body)
+	if err != nil {
+		return err
+	}
+	return nil
 }

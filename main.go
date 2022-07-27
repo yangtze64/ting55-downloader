@@ -37,5 +37,6 @@ func main() {
 	bookInfo := book.Parse(bookId)
 	fmt.Printf("%#+v\n", bookInfo)
 	downloader := book.NewDownloader(bookInfo, threadNum, downloadMode, downloadPath)
+	// downloader.DownloadAudio(1)
 	downloader.Download()
 }

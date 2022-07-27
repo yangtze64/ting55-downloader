@@ -28,7 +28,9 @@ const (
 	Computer AgentType = "computer"
 )
 
-var uaMap map[string][]string
+var (
+	uaMap map[string][]string
+)
 
 // go-bindata -o=pkg/ua/asset.go -pkg=ua pkg/ua/ua.json
 func GetAllUaMap() map[string][]string {
@@ -87,15 +89,23 @@ func (ua *UserAgent) Random() (string, error) {
 }
 
 func (ua *UserAgent) RandomAgent() AgentType {
-	if len(ua.Agents) == 1 {
-		return ua.Agents[0]
-	}
-	agentAll := []AgentType{
-		Chrome, Firefox, Safari, IE, Android, Ios, Linux, MacOS, Mobile, Ipad, Iphone, Computer,
+	var prepareAgent []AgentType
+	count := len(ua.Agents)
+	if count > 0 {
+		if len(ua.Agents) == 1 {
+			return ua.Agents[0]
+		} else {
+			prepareAgent = ua.Agents
+		}
+	} else {
+		prepareAgent = []AgentType{
+			Chrome, Firefox, Safari, IE, Android, Ios, Linux, MacOS, Mobile, Ipad, Iphone, Computer,
+		}
+		count = len(prepareAgent)
 	}
 	rand.Seed(time.Now().UnixNano())
-	r := rand.Intn(len(agentAll))
-	return agentAll[r]
+	r := rand.Intn(count)
+	return prepareAgent[r]
 }
 
 func (ua *UserAgent) IssetAgent(agent AgentType) bool {
