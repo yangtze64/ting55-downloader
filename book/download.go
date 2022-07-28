@@ -227,7 +227,6 @@ func (d *downloader) DownloadAudio(no int) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(url)
 	ext := path.Ext(url) //获取文件后缀
 	er := retry.Do(func() error {
 		res, e := http.Get(url)
