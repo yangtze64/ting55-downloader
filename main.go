@@ -14,6 +14,7 @@ var (
 	dp           = flag.String("p", "download/", "download path")
 	num          = flag.Int("n", 1, "thread num default 1")
 	mode         = flag.Int("m", 1, "download mod optional 1:Overwrite,2:Skip,3:Breakpoint Recovery,4:Keep Original")
+	chapter      = flag.Int("c", 0, "chapter n")
 	maxThreadNum = runtime.NumCPU() * 2
 )
 
@@ -23,6 +24,7 @@ func main() {
 	downloadPath := *dp
 	threadNum := *num
 	downloadMode := *mode
+	no := *chapter
 	if bookId == 0 {
 		log.Fatal(console.Red("请设置bookId"))
 	}
@@ -37,7 +39,18 @@ func main() {
 	bookInfo := book.Parse(bookId)
 	fmt.Printf("%#+v\n", bookInfo)
 	downloader := book.NewDownloader(bookInfo, threadNum, downloadMode, downloadPath)
-	// downloader.DownloadAudio(5)
-	downloader.Download()
-
+	if no > 0 {
+		if no <= bookInfo.Number {
+			err := downloader.DownloadAudio(no)
+			if err != nil {
+				fmt.Printf("download chapter %d fail,err %s\n", no, err.Error())
+			} else {
+				fmt.Printf("download chapter %d success\n", no)
+			}
+		} else {
+			log.Fatal(console.Red("book without this chapter"))
+		}
+	} else {
+		downloader.Download()
+	}
 }
