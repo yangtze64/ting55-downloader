@@ -202,30 +202,38 @@ func (d *downloader) deliver(jobCh chan int) {
 
 func (d *downloader) downloadJob(no int, statusCh chan int) error {
 	fmt.Printf("download chapter:%d\n", no)
-	time.Sleep(time.Second * 2)
 	err := d.DownloadAudio(no)
-	fmt.Println(err)
+	if err != nil {
+		fmt.Printf("download chapter %d fail,err %s\n", no, err.Error())
+	} else {
+		fmt.Printf("download chapter %d success\n", no)
+	}
 	statusCh <- no
 	return nil
 }
 
 func (d *downloader) DownloadAudio(no int) error {
 	book := d.book
-	chapter, err := book.GetChapter(no)
+	//chapter, err := book.GetChapter(no)
+	//if err != nil {
+	//	log.Fatal(err)
+	//	return err
+	//}
+	//url, err := chapter.GetChapterAudioUrl()
+	//if err != nil {
+	//	return err
+	//}
+	url, err := book.GetChapterAudioUrlByNo(no)
 	if err != nil {
-		log.Fatal(err)
 		return err
 	}
-	url, err := chapter.GetChapterAudioUrl()
-	if err != nil {
-		return err
-	}
+	fmt.Println(url)
 	ext := path.Ext(url) //获取文件后缀
 	er := retry.Do(func() error {
 		res, e := http.Get(url)
 		defer res.Body.Close()
 		if e != nil {
-			return err
+			return e
 		}
 		if res.StatusCode != http.StatusOK {
 			return errors.New(fmt.Sprintf("Audio Download res.StatusCode Is %d Not Is %d", res.StatusCode, http.StatusOK))
@@ -241,7 +249,7 @@ func (d *downloader) DownloadAudio(no int) error {
 			return err
 		}
 		return nil
-	})
+	}, retry.Attempts(20), retry.Delay(time.Second*2))
 
 	if er != nil {
 		return er

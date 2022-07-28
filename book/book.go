@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"ting55-downloader/pkg/console"
 	"ting55-downloader/pkg/request"
 	"ting55-downloader/pkg/ua"
@@ -43,13 +44,11 @@ type Chapter struct {
 	BookId   int
 	Page     int
 	IsPay    int
-	UA       string
 	L        string
 	XT       string
 	Host     string
 	Origin   string
 	Referer  string
-	IP       string
 	IsMobile bool
 }
 
@@ -131,21 +130,19 @@ func (b *Book) Init(html string) {
 func (b *Book) GetChapter(no int) (*Chapter, error) {
 	url := fmt.Sprintf("%s%s%s", Protocol, Host, fmt.Sprintf(ChapterUri, b.Id, no))
 	var (
-		ip       string
-		UA       string
 		isMobile bool
 		match    [][]string
 	)
 	e := retry.Do(func() error {
 		uaNew := ua.New()
 		// uaNew.Use(ua.Chrome, ua.Firefox, ua.Safari)
-		UA, _ = uaNew.Random()
+		UA, _ := uaNew.Random()
 		req, err := http.NewRequest("GET", url, nil)
 		if err != nil {
 			return err
 		}
 		req.Header.Set("User-Agent", UA)
-		ip = request.GenIpaddr()
+		ip := request.GenIpaddr()
 		req.Header.Set("X-Forwarded-For", ip)
 		res, err := (&http.Client{}).Do(req)
 		defer res.Body.Close()
@@ -195,14 +192,12 @@ func (b *Book) GetChapter(no int) (*Chapter, error) {
 		BookId:   b.Id,
 		Page:     no,
 		IsPay:    0,
-		UA:       UA,
 		IsMobile: isMobile,
 		L:        l,
 		XT:       xt,
 		Host:     host,
 		Origin:   origin,
 		Referer:  referer,
-		IP:       ip,
 	}
 	return chapter, nil
 }
@@ -219,7 +214,6 @@ func (c *Chapter) GetChapterAudioUrl() (string, error) {
 		"isPay":  c.IsPay,
 		"page":   c.Page,
 	}
-	//bytesData, _ := json.Marshal(data)
 	var str string
 	for k, v := range data {
 		str += fmt.Sprintf("%s=%s&", k, strconv.Itoa(v))
@@ -232,15 +226,19 @@ func (c *Chapter) GetChapterAudioUrl() (string, error) {
 		if err != nil {
 			return err
 		}
+		ip := request.GenIpaddr()
+		uaNew := ua.New()
+		UA, err := uaNew.Random()
+		fmt.Println(url, str, ip, UA)
 		req.Header.Set("Accept", "application/json, text/javascript, */*; q=0.01")
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.Header.Set("Content-Length", strconv.Itoa(contentLength))
-		req.Header.Set("User-Agent", c.UA)
+		req.Header.Set("User-Agent", UA)
 		req.Header.Set("Host", c.Host)
 		req.Header.Set("Origin", c.Origin)
 		req.Header.Set("Referer", c.Referer)
 		req.Header.Set("X-Requested-With", "XMLHttpRequest")
-		req.Header.Set("X-Forwarded-For", c.IP)
+		req.Header.Set("X-Forwarded-For", ip)
 		req.Header.Set("xt", c.XT)
 		if !c.IsMobile {
 			req.Header.Set("l", c.L)
@@ -251,7 +249,7 @@ func (c *Chapter) GetChapterAudioUrl() (string, error) {
 			return err
 		}
 		if res.StatusCode != http.StatusOK {
-			return err
+			return errors.New(fmt.Sprintf("Audio Url Download res.StatusCode Is %d Not Is %d", res.StatusCode, http.StatusOK))
 		}
 		body, err := ioutil.ReadAll(res.Body)
 		if err != nil {
@@ -283,4 +281,134 @@ func (c *Chapter) GetChapterAudioUrl() (string, error) {
 		return "", e
 	}
 	return resUrl, nil
+}
+
+func (b *Book) GetChapterAudioUrlByNo(no int) (string, error) {
+	var audioUrl string
+	e := retry.Do(func() error {
+		chapterUrl := fmt.Sprintf("%s%s%s", Protocol, Host, fmt.Sprintf(ChapterUri, b.Id, no))
+		uaNew := ua.New()
+		UA, _ := uaNew.Random()
+		req, err := http.NewRequest("GET", chapterUrl, nil)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("User-Agent", UA)
+		ip := request.GenIpaddr()
+		req.Header.Set("X-Forwarded-For", ip)
+		res, err := (&http.Client{}).Do(req)
+		defer res.Body.Close()
+		if err != nil {
+			return err
+		}
+		if res.StatusCode != http.StatusOK {
+			return errors.New(fmt.Sprintf("Chapter res.StatusCode Is %d Not Is %d", res.StatusCode, http.StatusOK))
+		}
+		body, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			return err
+		}
+		html := string(body)
+		if html == "" {
+			return errors.New("book chapter body is empty")
+		}
+		isMobile := !strings.Contains(html, "手机恋听网")
+		var re *regexp.Regexp
+		if isMobile {
+			re = regexp.MustCompile(`<meta name="_c" content="(.*?)"`)
+		} else {
+			re = regexp.MustCompile(`<meta name="_c" content="(.*?)".*?<meta name="_l" content="(.*?)"`)
+		}
+		match := re.FindAllStringSubmatch(html, -1)
+		if match == nil {
+			return errors.New("no book chapter information was matched")
+		}
+		xt := match[0][1]
+		l := "1"
+		if !isMobile {
+			l = match[0][2]
+		}
+		host := Host
+		if isMobile {
+			host = MobileHost
+		}
+		origin := fmt.Sprintf("%s%s", Protocol, host)
+		referer := fmt.Sprintf("%s%s%s", Protocol, host, fmt.Sprintf(ChapterUri, b.Id, no))
+
+		var audioReqUrl string
+		if isMobile {
+			audioReqUrl = fmt.Sprintf("%s%s%s", Protocol, MobileHost, MobileAudioReqUri)
+		} else {
+			audioReqUrl = fmt.Sprintf("%s%s%s", Protocol, Host, AudioReqUri)
+		}
+
+		data := map[string]int{
+			"bookId": b.Id,
+			"isPay":  0,
+			"page":   no,
+		}
+		var str string
+		for k, v := range data {
+			str += fmt.Sprintf("%s=%s&", k, strconv.Itoa(v))
+		}
+		str = strings.TrimSuffix(str, "&")
+		contentLength := len(str)
+
+		requ, err := http.NewRequest("POST", audioReqUrl, strings.NewReader(str))
+		if err != nil {
+			return err
+		}
+		// fmt.Println(audioReqUrl, str, ip, UA, xt)
+		requ.Header.Set("Accept", "application/json, text/javascript, */*; q=0.01")
+		requ.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		requ.Header.Set("Content-Length", strconv.Itoa(contentLength))
+		requ.Header.Set("User-Agent", UA)
+		requ.Header.Set("Host", host)
+		requ.Header.Set("Origin", origin)
+		requ.Header.Set("Referer", referer)
+		requ.Header.Set("X-Requested-With", "XMLHttpRequest")
+		requ.Header.Set("X-Forwarded-For", ip)
+		requ.Header.Set("xt", xt)
+		if !isMobile {
+			requ.Header.Set("l", l)
+		}
+		resp, err := (&http.Client{}).Do(requ)
+		defer resp.Body.Close()
+		if err != nil {
+			return err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return errors.New(fmt.Sprintf("Audio Url Download res.StatusCode Is %d Not Is %d", resp.StatusCode, http.StatusOK))
+		}
+		resBody, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		resultStr := string(resBody)
+		if resultStr == "" {
+			return errors.New("request chapter audio result is empty")
+		}
+		result := make(map[string]interface{})
+		err = json.Unmarshal([]byte(resultStr), &result)
+		if err != nil {
+			return err
+		}
+		status, ok := result["status"]
+		if !ok {
+			return errors.New("request chapter audio result no `status` is short")
+		}
+		resUrl, ok := result["url"]
+		if !ok {
+			return errors.New("request chapter audio result no `url` is short")
+		}
+		if status.(float64) != 1 || resUrl.(string) == "" {
+			return errors.New("request chapter audio result `status` is not 1 or `url` is empty")
+		}
+		audioUrl = resUrl.(string)
+		return nil
+	}, retry.Attempts(20), retry.Delay(time.Second*2))
+	if e != nil {
+		return "", e
+	}
+	return audioUrl, nil
 }
